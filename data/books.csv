@@ -1,11 +1,11 @@
-Title,Short Title,Title SEO,Genres,Author,Description,Rating,Pages,Year Published
-The Catcher in the Rye,Catcher in the Rye,catcher-in-the-rye,Fiction|Classic,J.D. Salinger,"A story about teenage angst and rebellion.",4.2,214,1951
-To Kill a Mockingbird,Mockingbird,to-kill-a-mockingbird,Fiction|Classic|Historical,Harper Lee,"A powerful tale of racial injustice in the Deep South.",4.8,281,1960
-1984,1984,1984,Fiction|Dystopian|Political,George Orwell,"A dystopian novel about totalitarianism and surveillance.",4.6,328,1949
-The Great Gatsby,Gatsby,the-great-gatsby,Fiction|Classic,F. Scott Fitzgerald,"A story about the American dream and its discontents.",4.5,180,1925
-Pride and Prejudice,Pride,pride-and-prejudice,Fiction|Romance|Classic,Jane Austen,"A witty exploration of love and social standing.",4.7,279,1813
-The Hobbit,Hobbit,the-hobbit,Fiction|Fantasy,J.R.R. Tolkien,"The adventurous tale of Bilbo Baggins in Middle-earth.",4.9,310,1937
-Dune,Dune,dune,Fiction|Sci-Fi,Frank Herbert,"An epic saga of politics, religion, and power on a desert planet.",4.4,412,1965
-Harry Potter and the Sorcerer's Stone,Harry Potter,harry-potter,Fiction|Fantasy|Young Adult,J.K. Rowling,"The beginning of a magical journey with Harry Potter.",4.9,309,1997
-The Alchemist,Alchemist,the-alchemist,Fiction|Philosophical,Paulo Coelho,"A mystical story of self-discovery and dreams.",4.3,167,1988
-Moby Dick,Moby,moby-dick,Fiction|Classic,Herman Melville,"A gripping tale of revenge and obsession with a white whale.",4.0,635,1851
+title,short_title,title_seo,genres,author,description,rating
+"The Catcher in the Rye","Catcher in the Rye","catcher-in-the-rye","Fiction|Classic","J.D. Salinger","A story about teenage angst and rebellion.",4.2
+"To Kill a Mockingbird","Mockingbird","to-kill-a-mockingbird","Fiction|Classic|Historical","Harper Lee","A powerful tale of racial injustice in the Deep South.",4.8
+"1984","1984","1984","Fiction|Dystopian|Political","George Orwell","A dystopian novel about totalitarianism and surveillance.",4.6
+"The Great Gatsby","Gatsby","the-great-gatsby","Fiction|Classic","F. Scott Fitzgerald","A story about the American dream and its discontents.",4.5
+"Pride and Prejudice","Pride","pride-and-prejudice","Fiction|Romance|Classic","Jane Austen","A witty exploration of love and social standing.",4.7
+"The Hobbit","Hobbit","the-hobbit","Fiction|Fantasy","J.R.R. Tolkien","The adventurous tale of Bilbo Baggins in Middle-earth.",4.9
+"Dune","Dune","dune","Fiction|Sci-Fi","Frank Herbert","An epic saga of politics, religion, and power on a desert planet.",4.4
+"Harry Potter and the Sorcerer's Stone","Harry Potter","harry-potter","Fiction|Fantasy|Young Adult","J.K. Rowling","The beginning of a magical journey with Harry Potter.",4.9
+"The Alchemist","Alchemist","the-alchemist","Fiction|Philosophical","Paulo Coelho","A mystical story of self-discovery and dreams.",4.3
+"Moby Dick","Moby","moby-dick","Fiction|Classic","Herman Melville","A gripping tale of revenge and obsession with a white whale.",4.0
