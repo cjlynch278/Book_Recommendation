@@ -2,17 +2,24 @@ import sqlite3
 import numpy as np
 import json
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+# Misnamed, this is both user and *book* operations
 
 class UserOperations:
-    def __init__(self, db_name="user_book_db.sqlite"):
+    def __init__(self, db_name="user_book_db.sqlite",config=None):
         """
         Initialize the database connection and create tables if they do not exist.
         
         :param db_name: Name of the SQLite database file.
         """
         self.conn = sqlite3.connect('./data/books.db')
-
-
+        self.config = config if config else {}
+        self.vectorized_data = None
+        self.feature_names = []
+        self.vectorizer = TfidfVectorizer(max_features=20)
+        
     def create_tables(self):
         """
         Create the necessary tables in the database.
@@ -26,7 +33,6 @@ class UserOperations:
                 )
             """)
 
-            
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS user_books (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,15 +55,15 @@ class UserOperations:
                     author TEXT,
                     description TEXT,
                     rating REAL,
-                    vector TEXT 
-                            
+                    vector TEXT
+                )
             """)
 
 
     ###################################
     ############ USER Operations ######
     ###################################
-    
+
     def add_user(self, name, vector=None):
         """
         Add a user to the database.
@@ -92,7 +98,28 @@ class UserOperations:
         user = self.conn.execute("SELECT vector FROM users WHERE user_id = ?", (user_id,)).fetchone()
         return np.array(json.loads(user[0])) if user and user[0] else None
 
-    
+
+    def get_user_by_id(self, user_id):
+        """
+        Get a user by its ID and return the result as a DataFrame with all columns.
+        
+        :param user_id: id of the user.
+        :return: DataFrame containing id details.
+        """
+        # Fetch the user details from the database
+        user = self.conn.execute("""
+            SELECT user_id, name, vector 
+            FROM users WHERE user_id = ?
+        """, (user_id,)).fetchall()
+
+        # Convert the result to a DataFrame
+        if user:
+            columns = ['user_id', 'name', 'vector']
+            df = pd.DataFrame(user, columns=columns)
+            return df
+        else:
+            return pd.DataFrame()  # Return an empty DataFrame if no user is found
+
     def update_user_vector_by_user_name(self, user_name, vector):
         """
         Update the vector representation of a user.
@@ -105,6 +132,7 @@ class UserOperations:
             self.conn.execute("""
                 UPDATE users SET vector = ? WHERE name = ?
             """, (vector_str, user_name))
+
     def update_user_vector_by_id(self, user_id, vector):
         """
         Update the vector representation of a user.
@@ -155,7 +183,7 @@ class UserOperations:
 
 
     ###################################
-    ############ BOOK Operations#######
+    ############ BOOK Operations ######
     ###################################
 
     def get_books_read_by_user_id(self, user_id):
@@ -182,8 +210,28 @@ class UserOperations:
         
         return books_df
 
-
-
+    def add_or_update_vector_column(self, df):
+        """
+        Add or update the vector column in the books table using SQLite.
+    
+        :param df: DataFrame with the updated 'vector' column.
+        """
+        # Ensure the vector is stored as a JSON string
+        df['vector'] = df['vector'].apply(lambda x: json.dumps(x.tolist()))
+    
+        # Add the vector column if it doesn't exist
+        if 'vector' not in df.columns:
+            self.conn.execute("ALTER TABLE books ADD COLUMN vector TEXT") 
+            
+        # Update each row with the corresponding vector
+        for _, row in df.iterrows():
+            self.conn.execute("""
+                UPDATE books
+                SET vector = ?
+                WHERE id = ?
+            """, (row['vector'], row['id']))
+    
+        self.conn.commit()
     def get_all_vectors(self):
         """
         Retrieve all vectors from the books table and return as a NumPy array.
@@ -205,50 +253,51 @@ class UserOperations:
         return np.array(vectors)
         
     def overwrite_books_table(self, df):
-            """
-            Overwrites the books table with the given dataframe. The vector column is converted to JSON format.
+        """
+        Overwrites the books table with the given dataframe. The vector column is converted to JSON format.
     
-            :param df: A pandas DataFrame containing the book data.
-            """
-            # Ensure the table exists
-            self.conn.execute("""
-                CREATE TABLE IF NOT EXISTS books (
-                    id INTEGER PRIMARY KEY,
-                    title TEXT,
-                    short_title TEXT,
-                    title_seo TEXT,
-                    genres TEXT,
-                    author TEXT,
-                    description TEXT,
-                    rating REAL,
-                    vector TEXT
-                )
-            """)
+        :param df: A pandas DataFrame containing the book data.
+        """
+        # Ensure the table exists
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS books (
+                id INTEGER PRIMARY KEY,
+                title TEXT,
+                short_title TEXT,
+                title_seo TEXT,
+                genres TEXT,
+                author TEXT,
+                description TEXT,
+                rating REAL,
+                vector TEXT
+            )
+        """)
             
-            # Clear the existing records in the table
-            self.conn.execute("DELETE FROM books")
+        # Clear the existing records in the table
+        self.conn.execute("DELETE FROM books")
             
-            # Insert the new data
-            for _, row in df.iterrows():
-                # Convert the vector column to JSON format if it exists
-                vector_json = json.dumps(row['vector'].tolist()) if isinstance(row['vector'], np.ndarray) else row['vector']
+        # Insert the new data
+        for _, row in df.iterrows():
+            # Convert the vector column to JSON format if it exists
+            vector_json = json.dumps(row['vector'].tolist()) if isinstance(row['vector'], np.ndarray) else row['vector']
                 
-                self.conn.execute("""
-                    INSERT INTO books (title, short_title, title_seo, genres, author, description, rating, vector)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    row['title'],
-                    row['short_title'],
-                    row['title_seo'],
-                    row['genres'],
-                    row['author'],
-                    row['description'],
-                    row['rating'],
-                    vector_json
-                ))
+            self.conn.execute("""
+                INSERT INTO books (title, short_title, title_seo, genres, author, description, rating, vector)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                row['title'],
+                row['short_title'],
+                row['title_seo'],
+                row['genres'],
+                row['author'],
+                row['description'],
+                row['rating'],
+                vector_json
+            ))
             
-            # Commit the changes and close the connection
-            self.conn.commit()
+        # Commit the changes and close the connection
+        self.conn.commit()
+
     def add_book(self, title, author, description):
         """
         Add a book to the database.
@@ -270,16 +319,249 @@ class UserOperations:
         :param book_title: Title of the book.
         """
 
+        # Check to see if book has already been read
+        read_books_df = self.get_books_read_by_user_id(1)
+        if book_id in read_books_df['book_id'].values:
+            print("Error: this has been read")
+            return
+        
         self.conn.execute("""
             INSERT OR IGNORE INTO user_books (user_id, book_id) VALUES (?, ?)
         """, (user_id, book_id))
         self.conn.commit()
 
+        self.recalculate_user_vector(user_id, book_id)
+
+
+    def get_all_books(self):
+        # Fetch the book details from the database
+        books = self.conn.execute("""
+            SELECT id, title, short_title, title_seo, genres, author, description, rating, vector 
+            FROM books
+        """).fetchall()
+
+        # Convert the result to a DataFrame
+        if books:
+            columns = ['id', 'title', 'short_title', 'title_seo', 'genres', 'author', 'description', 'rating', 'vector']
+            df = pd.DataFrame(books, columns=columns)
+            return df
     def get_book_by_id(self, book_id):
-
+        """
+        Get a book by its ID and return the result as a DataFrame with all columns.
+        
+        :param book_id: id of the book.
+        :return: DataFrame containing book details.
+        """
+        # Fetch the book details from the database
         book = self.conn.execute("""
-                select * from books where id = ?
-            """, str(book_id)).fetchall()
+            SELECT id, title, short_title, title_seo, genres, author, description, rating, vector 
+            FROM books WHERE id = ?
+        """, (book_id,)).fetchall()
 
-        return book
-                
+        # Convert the result to a DataFrame
+        if book:
+            columns = ['id', 'title', 'short_title', 'title_seo', 'genres', 'author', 'description', 'rating', 'vector']
+            df = pd.DataFrame(book, columns=columns)
+            return df
+        else:
+            return pd.DataFrame()  # Return an empty DataFrame if no book is found
+
+
+    def get_book_vector_by_id(self, book_id):
+        """
+        Retrieve the vector representation of a book.
+        
+        :param book_id: id of the book.
+        :return: Id vector as a NumPy array or None if not set.
+        """
+        book = self.conn.execute("SELECT vector FROM books WHERE id = ?", (book_id,)).fetchone()
+        return np.array(json.loads(book[0])) if book and book[0] else None
+        
+
+
+
+    def load_data(self, filepath):
+        """
+        Load a CSV file into a Pandas DataFrame.
+        
+        :param filepath: Path to the CSV file.
+        """
+        self.df = pd.read_csv(filepath)
+
+
+
+    def recalculate_user_vector(self, user_id, book_id):
+        """
+        Recalculate the user vector when they read a new book.
+        
+        :param user_id: ID of the user.
+        :param book_id: Index of the newly read book in the books DataFrame.
+        :return: Updated user vector as a NumPy array.
+        """
+        # Get the vector for the new book
+        new_book_vector = self.get_book_by_id(book_id)['vector']
+        print(new_book_vector)
+        # Retrieve the current user vector
+        user_vector = self.get_vector_by_user_id(user_id)
+        
+        if user_vector is None:
+            # If the user does not have an existing vector, initialize it with the new book's vector
+            new_user_vector = new_book_vector
+        else:
+            # Combine the new book vector with the existing user vector (average or sum)
+            user_vector =  self.get_vector_by_user_id(user_id)
+            book_vector = self.get_book_vector_by_id(book_id)
+            
+            new_user_vector = self.get_average_vector(user_vector,book_vector)
+
+        #Commit to db?
+        return new_user_vector
+
+    def vectorize_initial_text(self, df):
+        """
+        Vectorize text data using TF-IDF and append to the vectorized dataset.
+        :param dataframe: dataframe with columns to vectorizessa
+        
+        """
+
+
+        # Backlog, would it be smarter to simply retrieve the current df?
+        temp_df = df
+        # Combine text features into a single string for vectorization
+        temp_df['combined_text'] = df['title'] + " " + df['short_title'] + " " + df['description']
+        
+        # Fit and transform the combined text
+        vectors = self.vectorizer.fit_transform(temp_df['combined_text'])
+        
+        # Add vectors to the DataFrame
+        df['vector'] = list(vectors.toarray())
+
+        self.user_operations.add_or_update_vector_column(df)
+        return df
+        
+    def vectorize_categorical(self, column):
+        """
+        One-hot encode categorical data and append to the vectorized dataset.
+        
+        :param column: Column name in the DataFrame to encode.
+        """
+        encoder = OneHotEncoder(sparse_output=False)
+        encoded = encoder.fit_transform(self.df[[column]].fillna("Unknown"))
+        self._append_to_vectorized_data(encoded, encoder.get_feature_names_out([column]))
+    def add_vectorized_data_to_df(self):
+        """
+        Add the vectorized data as new columns to the original DataFrame.
+        """
+        if self.vectorized_data is None:
+            raise ValueError("The data has not been vectorized yet. Call vectorization methods first.")
+        
+        if 'vector' not in self.df.columns:
+            self.df['vector'] = list(self.vectorized_data)
+
+    def scale_numeric(self, column):
+        """
+        Scale numeric data and append to the vectorized dataset.
+        
+        :param column: Column name in the DataFrame to scale.
+        """
+        scaler = StandardScaler()
+        encoded = scaler.fit_transform(self.df[[column]].fillna(0))
+        self._append_to_vectorized_data(encoded, [column])
+
+    def _append_to_vectorized_data(self, data, feature_names):
+        """
+        Helper method to append new features to the vectorized data.
+        
+        :param data: NumPy array of the new data.
+        :param feature_names: List of feature names for the new data.
+        """
+        if self.vectorized_data is None:
+            self.vectorized_data = data
+        else:
+            self.vectorized_data = np.hstack((self.vectorized_data, data))
+        self.feature_names.extend(feature_names)
+
+    def get_vectorized_data(self):
+        """
+        Retrieve the final vectorized data.
+        
+        :return: NumPy array of vectorized data.
+        """
+        return self.vectorized_data
+
+    def get_feature_names(self):
+        """
+        Retrieve the feature names for the vectorized data.
+        
+        :return: List of feature names.
+        """
+        return self.feature_names
+
+    def get_vector_for_book(self, book_index):
+        """
+        Retrieve the vectorized data for a specific book by its index.
+        
+        :param book_index: Index of the book in the original DataFrame.
+        :return: Vectorized representation of the book as a NumPy array.
+        """
+        if self.vectorized_data is None:
+            raise ValueError("The data has not been vectorized yet. Call vectorization methods first.")
+        return self.vectorized_data[book_index]
+
+    # Euclidean distance
+    def get_vector_distance(self, vector1, vector2):
+        """
+        Calculate the Euclidean distance between two vectors.
+    
+        :param vector1: First vector as a NumPy array or list.
+        :param vector2: Second vector as a NumPy array or list.
+        :return: Euclidean distance as a float.
+        """
+        # Convert vectors to NumPy arrays for computation
+        v1 = np.array(vector1)
+        v2 = np.array(vector2)
+        
+        # Calculate the Euclidean distance
+        distance = np.sqrt(np.sum((v1 - v2) ** 2))
+        return distance
+
+    
+    def find_closest_vector(self, target_vector, vector_list):
+        """
+        Find the closest vector to the target vector from a list of vectors.
+        
+        :param target_vector: The target vector as a NumPy array or list.
+        :param vector_list: List of vectors, each as a NumPy array or list.
+        :return: The closest vector and its index in the vector list.
+        """
+        # Convert target vector to a NumPy array for computation
+        target = np.array(target_vector)
+        
+        # Initialize variables to track the closest vector and minimum distance
+        min_distance = float('inf')
+        closest_vector = None
+        closest_index = -1
+        
+        # Iterate over the vector list
+        for idx, vec in enumerate(vector_list):
+            vec = np.array(vec)  # Ensure each vector is a NumPy array
+            distance = np.linalg.norm(target - vec)  # Compute Euclidean distance
+            
+            if distance < min_distance:
+                min_distance = distance
+                closest_vector = vec
+                closest_index = idx
+        
+        return closest_vector, closest_index
+
+
+    def get_average_vector(self, vector1, vector2):
+
+        vector1_np = np.array(vector1)
+        vector2_np = np.array(vector2)
+        
+        average_vector = (vector1_np + vector2_np) / 2
+        
+        average_vector = average_vector.tolist()
+
+        return average_vector

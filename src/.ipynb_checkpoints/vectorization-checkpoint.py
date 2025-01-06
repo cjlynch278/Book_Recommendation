@@ -13,6 +13,10 @@ class Vectorization:
         self.config = config if config else {}
         self.vectorized_data = None
         self.feature_names = []
+        from src.user_operations import UserOperations
+
+        self.user_operations = UserOperations()
+        self.vectorizer = TfidfVectorizer(max_features=20)
 
     def load_data(self, filepath):
         """
@@ -22,16 +26,57 @@ class Vectorization:
         """
         self.df = pd.read_csv(filepath)
 
-    def vectorize_text(self, column):
+
+
+    def recalculate_user_vector(self, user_id, book_id):
+        """
+        Recalculate the user vector when they read a new book.
+        
+        :param user_id: ID of the user.
+        :param book_id: Index of the newly read book in the books DataFrame.
+        :return: Updated user vector as a NumPy array.
+        """
+        # Get the vector for the new book
+        new_book_vector = self.user_operations.get_book_by_id(book_id)['vector']
+        print(new_book_vector)
+        # Retrieve the current user vector
+        user_vector = self.user_operations.get_vector_by_user_id(user_id)
+        
+        if user_vector is None:
+            # If the user does not have an existing vector, initialize it with the new book's vector
+            new_user_vector = new_book_vector
+        else:
+            # Combine the new book vector with the existing user vector (average or sum)
+            user_vector =  self.user_operations.get_vector_by_user_id(user_id)
+            book_vector = self.user_operations.get_book_vector_by_id(book_id)
+            
+            new_user_vector = self.get_average_vector(user_vector,book_vector)
+
+        #Commit to db?
+        return new_user_vector
+
+    def vectorize_initial_text(self, df):
         """
         Vectorize text data using TF-IDF and append to the vectorized dataset.
+        :param dataframe: dataframe with columns to vectorizessa
         
-        :param column: Column name in the DataFrame to vectorize.
         """
-        tfidf = TfidfVectorizer(max_features=self.config.get("max_features", 100))
-        encoded = tfidf.fit_transform(self.df[column].fillna(""))
-        self._append_to_vectorized_data(encoded.toarray(), tfidf.get_feature_names_out())
 
+
+        # Backlog, would it be smarter to simply retrieve the current df?
+        temp_df = df
+        # Combine text features into a single string for vectorization
+        temp_df['combined_text'] = df['title'] + " " + df['short_title'] + " " + df['description']
+        
+        # Fit and transform the combined text
+        vectors = self.vectorizer.fit_transform(temp_df['combined_text'])
+        
+        # Add vectors to the DataFrame
+        df['vector'] = list(vectors.toarray())
+
+        self.user_operations.add_or_update_vector_column(df)
+        return df
+        
     def vectorize_categorical(self, column):
         """
         One-hot encode categorical data and append to the vectorized dataset.
@@ -146,3 +191,15 @@ class Vectorization:
                 closest_index = idx
         
         return closest_vector, closest_index
+
+
+    def get_average_vector(self, vector1, vector2):
+
+        vector1_np = np.array(vector1)
+        vector2_np = np.array(vector2)
+        
+        average_vector = (vector1_np + vector2_np) / 2
+        
+        average_vector = average_vector.tolist()
+
+        return average_vector
