@@ -19,7 +19,25 @@ class UserOperations:
         self.vectorized_data = None
         self.feature_names = []
         self.vectorizer = TfidfVectorizer(max_features=20)
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+    #OLD
     def create_tables(self):
         """
         Create the necessary tables in the database.
@@ -78,7 +96,17 @@ class UserOperations:
             """, (name, vector_str))
 
 
-    def get_user_vector(self, user_name):
+    def get_user_vector_by_id(self, id):
+        """
+        Retrieve the vector representation of a user.
+        
+        :param user_name: Name of the user.
+        :return: User vector as a NumPy array or None if not set.
+        """
+        user = self.conn.execute("SELECT vector FROM users WHERE user_id = ?", (id,)).fetchone()
+        return np.array(json.loads(user[0])) if user and user[0] else None
+
+    def get_user_vector_by_user_name(self, user_name):
         """
         Retrieve the vector representation of a user.
         
@@ -208,7 +236,14 @@ class UserOperations:
         # Convert the result into a DataFrame with columns 'user_id' and 'book_id'
         books_df = pd.DataFrame(books, columns=['user_id', 'book_id'])
         
-        return books_df
+        print(books_df)
+        
+        all_books = pd.DataFrame()
+        for id in books_df['book_id']:
+            book = self.get_book_by_id(id)
+            all_books = pd.concat([all_books, book], ignore_index=True)
+
+        return all_books
 
     def add_or_update_vector_column(self, df):
         """
@@ -318,9 +353,16 @@ class UserOperations:
         :param user_name: Name of the user.
         :param book_title: Title of the book.
         """
-
+        # Step 1: Ensure the book exists in the database
+        book_exists = self.conn.execute("""
+            SELECT 1 FROM books WHERE id = ?
+        """, (book_id,)).fetchone()
+    
+        if not book_exists:
+            print("Error: Book does not exist in the database.")
+            return
         # Check to see if book has already been read
-        read_books_df = self.get_books_read_by_user_id(1)
+        read_books_df = self.get_books_read_by_user_id(user_id)
         if book_id in read_books_df['book_id'].values:
             print("Error: this has been read")
             return
@@ -399,6 +441,7 @@ class UserOperations:
         :return: Updated user vector as a NumPy array.
         """
         # Get the vector for the new book
+        print(f"New Book: {self.get_book_by_id(book_id)}")
         new_book_vector = self.get_book_by_id(book_id)['vector']
         print(new_book_vector)
         # Retrieve the current user vector
