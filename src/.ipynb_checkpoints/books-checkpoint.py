@@ -2,20 +2,41 @@ import uuid
 import pandas as pd
 import chromadb
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from chromadb.utils import embedding_functions
 
 
 class Books:
     def __init__(self, db_path="./chroma_db"):
         """Initialize ChromaDB with persistent storage."""
-        self.vectorizer = TfidfVectorizer(max_features=20)
         self.chroma_client = chromadb.PersistentClient(path=db_path)  # ✅ Persist DB
-        self.books_collection = self.chroma_client.get_or_create_collection(name="books")
 
+        # Use ChromaDB's built-in SentenceTransformer embedding function
+        self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+
+        self.books_collection = self.chroma_client.get_or_create_collection(
+            name="books",    
+            embedding_function=self.embedding_function
+        )
+        self.delete_all_books()
+        
+        self.create_collection()
+    def delete_books_collection(self):
+        """Deletes the entire books collection from ChromaDB if it exists."""
+        try:
+            # Attempt to get the collection to check if it exists
+            self.books_collection = self.chroma_client.get_collection('books')
+            if self.books_collection:
+                self.chroma_client.delete_collection('books')
+                print("✅ 'books' collection deleted.")
+            else:
+                print("'books' collection does not exist.")
+        except Exception as e:
+            print(f"Error checking or deleting collection: {e}")
     def create_collection(self):
         """Reads books from CSV and stores them in ChromaDB."""
         df = pd.read_csv("./data/books.csv")
-        book_vectors = self.vectorizer.fit_transform(df["description"].fillna("")).toarray()
-
         for idx, row in df.iterrows():
             self.add_book(
                 title=row["title"],
@@ -23,26 +44,28 @@ class Books:
                 genres=row["genres"],
                 rating=float(row["rating"]),
                 description=row["description"],
-                embedding=book_vectors[idx].tolist()
             )
 
-        print("Books stored in ChromaDB with 20-dimensional TF-IDF embeddings.")
+        print("Books stored in ChromaDB with default embedding.")
 
-    def add_book(self, title, author, genres, rating, description, embedding):
+    def add_book(self, title, author, genres, rating, description):
         """Adds a new book to the ChromaDB collection."""
         book_id = str(uuid.uuid4())
-
+            
+        document = f"{title} by {author}. Genres: {genres}. Description: {description}"
+        
         self.books_collection.add(
             ids=[book_id],
-            documents=[description],  # ✅ Store description here
-            embeddings=[embedding],
+            documents=[document],
             metadatas=[{
                 "title": title,
                 "author": author,
                 "genres": genres,
-                "rating": rating
+                "rating": rating,
+                "description": description  
             }]
         )
+
         print(f"Book '{title}' added with ID: {book_id}")
 
     def get_book_by_id(self, book_id):
@@ -80,4 +103,25 @@ class Books:
         print(f"Book updated with ID: {book_id}")
 
     def delete_all_books(self):
-        self.books_collection.delete(self.books_collection.get()['ids'])
+        all_ids = self.books_collection.get()['ids']
+        if all_ids:
+            self.books_collection.delete(all_ids)
+        else:
+            print("No books to delete.")
+
+
+    # Get average vector in chroma. This is used for a 'starting' point for each new user.
+    def get_average_vector(self):
+        all_data = self.books_collection.get(include=["embeddings"])
+        
+        # Extract all embeddings
+        embeddings = all_data["embeddings"]
+    
+        # Check if embeddings is not empty
+        if len(embeddings) > 0:
+            average_vector = np.mean(embeddings, axis=0)
+            return average_vector
+        else:
+            return None
+    
+                   
