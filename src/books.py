@@ -14,14 +14,21 @@ class Books:
 
         # Use ChromaDB's built-in SentenceTransformer embedding function
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+        # Check if collection already exists
+        existing_collections = [col.name for col in self.chroma_client.list_collections()]
+        is_new = "books" not in existing_collections
 
         self.books_collection = self.chroma_client.get_or_create_collection(
-            name="books",    
+            name="books",
             embedding_function=self.embedding_function
         )
-        self.delete_all_books()
+
+        if is_new:
+            print("📚 'books' collection not found. Creating and populating it now...")
+            self.create_collection()
+        else:
+            print("📚 'books' collection found. Skipping creation.")
         
-        self.create_collection()
     def delete_books_collection(self):
         """Deletes the entire books collection from ChromaDB if it exists."""
         try:
@@ -34,6 +41,7 @@ class Books:
                 print("'books' collection does not exist.")
         except Exception as e:
             print(f"Error checking or deleting collection: {e}")
+            
     def create_collection(self):
         """Reads books from CSV and stores them in ChromaDB."""
         df = pd.read_csv("./data/books.csv")
@@ -66,11 +74,10 @@ class Books:
             }]
         )
 
-        print(f"Book '{title}' added with ID: {book_id}")
 
     def get_book_by_id(self, book_id):
         """Retrieves a book from ChromaDB by its unique ID."""
-        result = self.books_collection.get(ids=[book_id], include=["documents", "metadatas", "embeddings"])
+        result = self.books_collection.get(ids=[str(book_id)], include=["documents", "metadatas", "embeddings"])
         return result if result["ids"] else None
 
     def get_book_by_name(self, title):
@@ -85,6 +92,7 @@ class Books:
         self.books_collection.delete(ids=[book_id])
         print(f"Book with ID {book_id} deleted.")
 
+    # This is broken and uses the old vectorizer
     def update_book_vector(self, book_id, new_description):
         """Updates a book's vector representation in ChromaDB."""
         new_embedding = self.vectorizer.fit_transform([new_description]).toarray()[0].tolist()
