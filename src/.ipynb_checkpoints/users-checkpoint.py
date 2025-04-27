@@ -14,20 +14,12 @@ class Users:
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         self.books = Books()
         
-        # Check if collection already exists
-        existing_collections = [col.name for col in self.chroma_client.list_collections()]
-        is_new = "users" not in existing_collections
 
         self.users_collection = self.chroma_client.get_or_create_collection(
             name="users",
             embedding_function=self.embedding_function
         )
 
-        if is_new:
-            print("📚 'users' collection not found. Creating and populating it now...")
-            self.create_collection()
-        else:
-            print("📚 'users' collection found. Skipping creation.")
         
     def delete_users_collection(self):
         """Deletes the entire users collection from ChromaDB if it exists."""
@@ -43,19 +35,6 @@ class Users:
             print(f"Error checking or deleting collection: {e}")
             
     
-    def create_collection(self):
-        """Initialize ChromaDB collection with a default user 'Chris Lynch'."""
-        default_user = "Chris Lynch"
-        default_embedding = self.books.get_average_vector()
-
-        self.users_collection.add(
-            ids=[str(uuid.uuid4())],
-            embeddings=[default_embedding],
-            metadatas=[{"name": default_user}]
-        )
-
-        print("User collection initialized with default user 'Chris Lynch'.")
-
     def get_books_read_by_user_id(self, user_id: str):
         """Returns all books read by a specific user based on user_id."""
         results = self.books.books_collection.get(
@@ -95,7 +74,6 @@ class Users:
         self.recalculate_user_vector(user_id, book_id)
 
 
-
     def update_user_vector_by_id(self, user_id, vector):
         """
         Update the vector representation of a user.
@@ -112,7 +90,7 @@ class Users:
     
     def add_user(self, name):
         """Adds a new user to the ChromaDB collection."""
-        user_embedding = self.vectorizer.fit_transform([name]).toarray()[0].tolist()
+        user_embedding = self.books.get_average_vector()
         user_id = str(uuid.uuid4())
 
         self.users_collection.add(
@@ -124,7 +102,15 @@ class Users:
         print(f"User '{name}' added with ID: {user_id}")
 
     def delete_user(self, user_id):
-        """Deletes a user from ChromaDB using their ID."""
+        """Deletes a user from ChromaDB using their ID, but only if they exist."""
+        # Check if user exists
+        user = self.users_collection.get(ids=[user_id], include=["metadatas"])
+        
+        if not user["ids"]:  
+            print(f"User with ID {user_id} not found. Nothing deleted.")
+            return
+        
+        # If user exists, delete
         self.users_collection.delete(ids=[user_id])
         print(f"User with ID {user_id} deleted.")
 
@@ -155,3 +141,28 @@ class Users:
             query_texts=[name], n_results=1, include=["metadatas", "embeddings"]
         )
         return results if results["ids"] else None
+
+
+    def recalculate_user_vector(self, user_id, new_book_vector):
+        # Fetch existing user vector and number of books read
+        user_data = self.users_collection.get(
+            where={"user_id": user_id}, 
+            include=["embeddings", "metadatas"]
+        
+        )
+        old_user_vector = user_data["embeddings"][0]
+        num_books_read = user_data["metadatas"][0].get("num_books_read", 0)
+    
+        # Weighted average update
+        updated_vector = (
+            (np.array(old_user_vector) * num_books_read + np.array(new_book_vector))
+            / (num_books_read + 1)
+        )
+    
+        # Update user's record
+        self.users_collection.update(
+            where={"user_id": user_id},
+            embeddings=[updated_vector.tolist()],
+            metadatas=[{"num_books_read": num_books_read + 1}]
+        )
+
