@@ -74,7 +74,10 @@ class Books:
             }]
         )
 
-
+    def get_all_books(self):
+        return self.books_collection.get(
+            include=["documents", "metadatas", "embeddings"])
+        
     def get_book_by_id(self, book_id):
         """Retrieves a book from ChromaDB by its unique ID."""
         result = self.books_collection.get(ids=[str(book_id)], include=["documents", "metadatas", "embeddings"])
