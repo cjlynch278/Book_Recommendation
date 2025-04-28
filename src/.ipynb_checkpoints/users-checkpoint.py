@@ -4,7 +4,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sentence_transformers import SentenceTransformer
 from chromadb.utils import embedding_functions
 from src.books import Books
-
+import json
 
 class Users:
     def __init__(self, db_path="./chroma_db"):
@@ -43,36 +43,41 @@ class Users:
         )
         return results
 
-    def track_book_reading(self, user_id, book_id):
+
+    def track_book_reading(self, user_id: str, book_id: str):
         """
-        Record that a user has read a book using ChromaDB.
+        Records that a user has read a book by adding the book_id to the user's metadata.
+        Also recalculates the user's vector based on the new book read.
         """
-        book = self.books.get_book_by_id(book_id)
+        user_data = self.users_collection.get(ids=[user_id], include=["metadatas"])
     
-        if not book or not book["ids"]:
-            print("Error: Book does not exist in the database.")
+        if not user_data["metadatas"]:
+            print(f"Error: User with ID {user_id} not found.")
             return
     
-        # Check if the user already read this book
-        read_books = self.get_books_read_by_user_id(user_id)
-        if book_id in read_books.get("ids", []):
-            print("Error: This book has already been read by the user.")
+        user_metadata = user_data["metadatas"][0]
+    
+        # Load existing book IDs or start fresh
+        books_read_ids = json.loads(user_metadata.get("books_read_ids", "[]"))
+    
+        if book_id in books_read_ids:
+            print(f"Book {book_id} already recorded for user {user_id}.")
             return
     
-        # Add a new record associating this user with the book
-        original_metadata = book["metadatas"][0]
-        new_metadata = original_metadata.copy()
-        new_metadata["user_id"] = user_id
+        books_read_ids.append(book_id)
     
-        self.books.books_collection.add(
-            ids=[book_id],
-            documents=[book["documents"][0]],
-            embeddings=[book["embeddings"][0]],
-            metadatas=[new_metadata]
+        # Save back as JSON string
+        user_metadata["books_read_ids"] = json.dumps(books_read_ids)
+    
+        self.users_collection.update(
+            ids=[user_id],
+            metadatas=[user_metadata]
         )
     
+        print(f"Book {book_id} recorded for user {user_id}.")
+    
+        # Recalculate the user's embedding
         self.recalculate_user_vector(user_id, book_id)
-
 
     def update_user_vector_by_id(self, user_id, vector):
         """
@@ -142,14 +147,17 @@ class Users:
         )
         return results if results["ids"] else None
 
-
+    def get_all_users(self):
+        return self.users_collection.get(   
+            include=["embeddings", "metadatas","documents"]
+        )
     def recalculate_user_vector(self, user_id, new_book_vector):
         # Fetch existing user vector and number of books read
         user_data = self.users_collection.get(
-            where={"user_id": user_id}, 
-            include=["embeddings", "metadatas"]
-        
+            ids=[user_id],
+            include=["embeddings", "metadatas", "documents"]
         )
+                
         old_user_vector = user_data["embeddings"][0]
         num_books_read = user_data["metadatas"][0].get("num_books_read", 0)
     

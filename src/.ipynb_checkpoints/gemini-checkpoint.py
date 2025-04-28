@@ -9,9 +9,7 @@ class Gemini():
         self.gemini_api_key = config['gemini_api_key']  # Replace with your actual API key
 
     def query_gemini(self, query):
-        import requests
-        import json
-        
+
         # Set up your API key and the URL for the request
         api_key = self.gemini_api_key  # Replace with your actual API key
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
